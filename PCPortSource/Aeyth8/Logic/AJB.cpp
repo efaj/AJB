@@ -49,6 +49,7 @@
 
 // Needed for temporarily fixing the infinite loading screen.
 #include "../../Dumper-7/SDK/BP_AJBBattleGameMode_classes.hpp"
+#include "../../Dumper-7/SDK/BP_AJBInGameAIRecognition_classes.hpp"
 
 // ......
 #include "Server/Temporary/MRWT.h"
@@ -1303,6 +1304,32 @@ bool __fastcall AJB::FlowUtilChangeState(SDK::FFlowStateHandler* StateHandler, S
 		}
 
 		static SDK::FName InGameStandby = FName::NAME_FindOrAdd(L"InGame.Standby");
+		static SDK::FName InGameGameplay = FName::NAME_FindOrAdd(L"InGame.Gameplay");
+		if (NextStateTag.TagName == InGameStandby || NextStateTag.TagName == InGameGameplay)
+		{
+			int32 TargetAILevel = (AJB::Instance && AJB::Instance->BattleSettings.AILevel >= 1 && AJB::Instance->BattleSettings.AILevel <= 4)
+				? AJB::Instance->BattleSettings.AILevel : 3;
+			int PatchedBots{0};
+			for (SDK::UBP_AJBInGameAIRecognition_C* Recog : Pointers::FindObjects<SDK::UBP_AJBInGameAIRecognition_C>())
+			{
+				if (Recog && !Recog->IsDefaultObject())
+				{
+					if (Recog->AILevel != TargetAILevel)
+					{
+						static SDK::UFunction* SetupFunc = nullptr;
+						if (!SetupFunc) SetupFunc = Recog->Class->GetFunction("BP_AJBInGameAIRecognition_C", "SetupAILevel");
+						if (SetupFunc) Recog->ProcessEvent(SetupFunc, &TargetAILevel);
+					}
+					Recog->ProbabilityToFindEnemyIfNoPlayersAroundParam = 1.0f;
+					Recog->DistanceThresholdToPlayerForFindingEnemyParam = 1e9f;
+					++PatchedBots;
+				}
+			}
+			if (PatchedBots > 0)
+			{
+				LogA("BotAI", std::format("Configured {} bots at AI Level {} (aggressive target acquisition enabled)", PatchedBots, TargetAILevel));
+			}
+		}
 		if (AJB::IsServer() && NextStateTag.TagName == InGameStandby)
 		{
 			AJB::CreateCallbackTimer(AJB::CheckForInfiniteLoadingScreen, 15.0f);

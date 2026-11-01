@@ -194,6 +194,7 @@ using namespace Global;
 #include "../../Dumper-7/SDK/Landscape_classes.hpp"
 #include "../../Dumper-7/SDK/BP_AJBDamageAreaLocal_classes.hpp"
 #include "../../Dumper-7/SDK/WB_DBISequencerSkipper_classes.hpp"
+#include "../../Dumper-7/SDK/BP_AJBInGameAIRecognition_classes.hpp"
 
 static bool* TOGGLEDEBUGBADGAMEDESIGN{nullptr};
 
@@ -464,7 +465,7 @@ SDK::FString* UFunctions::ConsoleCommand(SDK::APlayerController* This, SDK::FStr
 	{
 		int PARM_Area{0};
 		int PARM_NPCCount{0};
-		int PARM_NPCDifficulty{0};
+		int PARM_NPCDifficulty{2};
 		int PARM_PlayMode{0};
 		bool PARM_Respawn{false};
 
@@ -527,7 +528,7 @@ SDK::FString* UFunctions::ConsoleCommand(SDK::APlayerController* This, SDK::FStr
 
 
 		SDK::FAJBBattleSettings TheSettings{};
-		TheSettings.AILevel = PARM_NPCDifficulty;
+		TheSettings.AILevel = (PARM_NPCDifficulty < 0 ? 0 : (PARM_NPCDifficulty > 3 ? 3 : PARM_NPCDifficulty)) + 1;
 		TheSettings.DamageAreaType = PARM_Area;
 		AJB::Instance->SetBattleSettings(TheSettings);
 		AJB::Instance->PlayMode = (SDK::EPlayMode)PARM_PlayMode;
@@ -1768,6 +1769,26 @@ void UFunctions::Invoke(SDK::UFunction* This, SDK::UObject* Obj, void* FFrame_St
 	}
 
 	OFF::Invoke.VerifyFC<Decl::Invoke>()(This, Obj, FFrame_Stack, Result);
+
+	static int32 SetupAILevelIndex{0};
+	static int32 UberAIRecogIndex{0};
+	if (SetupAILevelIndex == 0 && This)
+	{
+		SetupAILevelIndex = FName::NAME_FindOrAdd(L"SetupAILevel").ComparisonIndex;
+		UberAIRecogIndex = FName::NAME_FindOrAdd(L"ExecuteUbergraph_BP_AJBInGameAIRecognition").ComparisonIndex;
+	}
+	if (This && Obj && (This->Name.ComparisonIndex == SetupAILevelIndex || This->Name.ComparisonIndex == UberAIRecogIndex))
+	{
+		if (!Obj->IsDefaultObject() && Obj->IsA(SDK::UBP_AJBInGameAIRecognition_C::StaticClass()))
+		{
+			auto* Recog = static_cast<SDK::UBP_AJBInGameAIRecognition_C*>(Obj);
+			if (Recog->ProbabilityToFindEnemyIfNoPlayersAroundParam != 1.0f)
+			{
+				Recog->ProbabilityToFindEnemyIfNoPlayersAroundParam = 1.0f;
+				Recog->DistanceThresholdToPlayerForFindingEnemyParam = 1e9f;
+			}
+		}
+	}
 }
 
 bool UFunctions::IsNonPakFilenameAllowed(__int64* This, SDK::FString& InFilename)
